@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug Geocoding</title>
+</head>
+<body>
+    <h2>Test Geocoding Function</h2>
+    <input type="text" id="alamat" placeholder="Masukkan alamat" style="width: 400px; padding: 10px;">
+    <button onclick="testGeocode()">Test Geocoding</button>
+    <div id="result" style="margin-top: 20px; padding: 10px; background: #f0f0f0;"></div>
+
+    <script>
+        // FUNGSI GEOCODING YANG SEDANG DIGUNAKAN
+        async function testGeocode() {
+            const alamat = document.getElementById('alamat').value;
+            const resultDiv = document.getElementById('result');
+            
+            if (!alamat || alamat.length < 5) {
+                resultDiv.innerHTML = '<span style="color: red;">Masukkan alamat terlebih dahulu (minimal 5 karakter)</span>';
+                return;
+            }
+
+            resultDiv.innerHTML = '<span style="color: blue;">🔍 Mencari koordinat...</span>';
+
+            try {
+                // Array pencarian dengan berbagai format
+                const searchQueries = [
+                    alamat + ', Gunungsari, Dawarblandong, Mojokerto, Jawa Timur',
+                    alamat + ', Gunungsari, Mojokerto',
+                    'Gunungsari, Dawarblandong, Mojokerto',
+                    'Dawarblandong, Mojokerto',
+                    'Mojokerto, Jawa Timur'
+                ];
+
+                let found = false;
+                let results = [];
+                
+                for (let i = 0; i < searchQueries.length; i++) {
+                    const query = searchQueries[i];
+                    console.log(`Mencoba query ${i+1}: ${query}`);
+                    
+                    const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`);
+                    const data = await response.json();
+                    
+                    results.push({
+                        query: query,
+                        found: data && data.length > 0,
+                        data: data
+                    });
+
+                    if (data && data.length > 0) {
+                        let lat = parseFloat(data[0].lat);
+                        let lng = parseFloat(data[0].lon);
+                        
+                        // Buat offset konsisten berdasarkan hash alamat
+                        const hash = alamat.split('').reduce((a, b) => {
+                            a = ((a << 5) - a) + b.charCodeAt(0);
+                            return a & a;
+                        }, 0);
+                        
+                        console.log(`Hash untuk "${alamat}": ${hash}`);
+                        
+                        // Konversi hash ke offset yang konsisten
+                        const offsetLat = ((hash % 1000) - 500) * 0.000009;
+                        const offsetLng = (((hash >> 10) % 1000) - 500) * 0.000009;
+                        
+                        console.log(`Offset: lat=${offsetLat}, lng=${offsetLng}`);
+                        
+                        lat += offsetLat;
+                        lng += offsetLng;
+                        
+                        resultDiv.innerHTML = `
+                            <h3 style="color: green;">✅ BERHASIL DITEMUKAN</h3>
+                            <p><strong>Query berhasil:</strong> ${query}</p>
+                            <p><strong>Koordinat asli:</strong> ${data[0].lat}, ${data[0].lon}</p>
+                            <p><strong>Hash alamat:</strong> ${hash}</p>
+                            <p><strong>Offset:</strong> ${offsetLat.toFixed(7)}, ${offsetLng.toFixed(7)}</p>
+                            <p><strong>Koordinat final:</strong> ${lat.toFixed(7)}, ${lng.toFixed(7)}</p>
+                            <p><strong>Display name:</strong> ${data[0].display_name}</p>
+                        `;
+                        found = true;
+                        break;
+                    }
+                }
+                
+                if (!found) {
+                    // Set ke koordinat default Mojokerto dengan offset berdasarkan alamat
+                    let defaultLat = -7.4753;
+                    let defaultLng = 112.4339;
+                    
+                    // Hash alamat untuk offset konsisten
+                    const hash = alamat.split('').reduce((a, b) => {
+                        a = ((a << 5) - a) + b.charCodeAt(0);
+                        return a & a;
+                    }, 0);
+                    
+                    // Offset dalam radius ~2km untuk area Mojokerto
+                    const offsetLat = ((hash % 2000) - 1000) * 0.000018;
+                    const offsetLng = (((hash >> 11) % 2000) - 1000) * 0.000018;
+                    
+                    defaultLat += offsetLat;
+                    defaultLng += offsetLng;
+                    
+                    let resultHtml = `
+                        <h3 style="color: orange;">⚠️ TIDAK DITEMUKAN - MENGGUNAKAN DEFAULT</h3>
+                        <p><strong>Hash alamat:</strong> ${hash}</p>
+                        <p><strong>Koordinat default:</strong> -7.4753, 112.4339</p>
+                        <p><strong>Offset:</strong> ${offsetLat.toFixed(7)}, ${offsetLng.toFixed(7)}</p>
+                        <p><strong>Koordinat final:</strong> ${defaultLat.toFixed(7)}, ${defaultLng.toFixed(7)}</p>
+                        <h4>Detail Pencarian:</h4>
+                    `;
+                    
+                    results.forEach((result, index) => {
+                        resultHtml += `
+                            <p><strong>Query ${index + 1}:</strong> ${result.query}</p>
+                            <p style="margin-left: 20px;">Status: ${result.found ? '✅ Ditemukan' : '❌ Tidak ditemukan'}</p>
+                            <p style="margin-left: 20px;">Response: ${JSON.stringify(result.data).substring(0, 100)}...</p>
+                        `;
+                    });
+                    
+                    resultDiv.innerHTML = resultHtml;
+                }
+            } catch (error) {
+                console.error('Geocoding error:', error);
+                resultDiv.innerHTML = `<span style="color: red;">❌ ERROR: ${error.message}</span>`;
+            }
+        }
+    </script>
+</body>
+</html>
