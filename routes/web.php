@@ -8,6 +8,8 @@ use App\Http\Controllers\ResidentController;
 use App\Http\Controllers\SocialAidController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\Auth\LoginController;
+use App\Http\Controllers\DebtController;
+
 
 Route::get('/login', [LoginController::class, 'showLoginForm'])->name('login');
 Route::post('/login', [LoginController::class, 'login'])->middleware('throttle:5,1');
@@ -16,6 +18,9 @@ Route::post('/logout', [LoginController::class, 'logout'])->name('logout');
 Route::get('/', [HouseController::class, 'index'])->name('home');
 
 Route::resource('houses', HouseController::class);
+Route::get('houses/{house}/kk', [HouseController::class, 'kk'])
+    ->name('houses.kk')
+    ->middleware(['auth', 'role:super_admin,admin_desa', 'throttle:20,1']);
 Route::get('houses-export', [HouseController::class, 'export'])->name('houses.export');
 Route::post('houses-import', [HouseController::class, 'import'])->name('houses.import');
 

@@ -9,9 +9,100 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Routing\Controller as BaseController;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Str;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class HouseController extends BaseController
 {
+
+    public function kk(House $house, Request $request)
+    {
+        // Role gate
+        if (!auth()->user()->hasAnyRole(['super_admin', 'admin_desa'])) {
+            abort(403);
+        }
+
+        if (!$house->foto_kk) {
+            abort(404);
+        }
+
+        $disk = Storage::disk('secure');
+        $path = $house->foto_kk;
+
+        if (!$disk->exists($path)) {
+            abort(404);
+        }
+
+        // (Opsional tapi recommended) audit log minimal ke laravel.log
+        \Log::info('KK accessed', [
+            'house_id' => $house->id,
+            'user_id' => auth()->id(),
+            'ip' => $request->ip(),
+            'ua' => substr((string) $request->userAgent(), 0, 180),
+        ]);
+
+        $mime = $disk->mimeType($path) ?: 'application/octet-stream';
+
+        // Mode Nginx X-Accel (lebih cepat, private)
+        if (env('KK_USE_X_ACCEL', true)) {
+            return response('', 200, [
+                'Content-Type' => $mime,
+                'Content-Disposition' => 'inline; filename="KK-' . $house->id . '.jpg"',
+                'Cache-Control' => 'no-store, private',
+                'X-Accel-Redirect' => '/_protected/' . $path,
+            ]);
+        }
+
+        // Fallback streaming (kalau tidak pakai X-Accel)
+        $stream = $disk->readStream($path);
+        return response()->stream(function () use ($stream) {
+            fpassthru($stream);
+            if (is_resource($stream))
+                fclose($stream);
+        }, 200, [
+            'Content-Type' => $mime,
+            'Cache-Control' => 'no-store, private',
+        ]);
+    }
+
+    private function storeKkImageSecure(UploadedFile $file): string
+    {
+        // Validasi “real image”, bukan cuma mime/extension
+        $info = @getimagesize($file->getRealPath());
+        if ($info === false) {
+            abort(422, 'File foto KK tidak valid (bukan gambar asli).');
+        }
+
+        [$w, $h] = $info;
+        if ($w > 7000 || $h > 7000) {
+            abort(422, 'Resolusi foto terlalu besar. Tolong kompres foto terlebih dahulu.');
+        }
+
+        // Re-encode ke JPEG untuk buang EXIF/metadata (privacy)
+        $img = @imagecreatefromstring(file_get_contents($file->getRealPath()));
+        if (!$img) {
+            abort(422, 'Gagal memproses gambar KK.');
+        }
+
+        $filename = 'kk/' . (string) Str::uuid() . '.jpg';
+        $tmpDir = storage_path('app/tmp-kk');
+        if (!is_dir($tmpDir)) {
+            mkdir($tmpDir, 0700, true);
+        }
+        $tmpPath = $tmpDir . '/' . basename($filename);
+
+        imagejpeg($img, $tmpPath, 90);
+        imagedestroy($img);
+
+        $stream = fopen($tmpPath, 'rb');
+        Storage::disk('secure')->put($filename, $stream);
+        if (is_resource($stream))
+            fclose($stream);
+        @unlink($tmpPath);
+
+        return $filename; // contoh: kk/<uuid>.jpg
+    }
     public function __construct()
     {
         $this->middleware('auth')->except(['index', 'show']);
@@ -20,7 +111,7 @@ class HouseController extends BaseController
     {
         $points = collect([]);
         $umkmPoints = collect([]);
-        
+
         if (Schema::hasTable('houses')) {
             $query = House::with('residents')->latest();
             if ($request->filled('q')) {
@@ -49,7 +140,8 @@ class HouseController extends BaseController
                     : $collection->sortByDesc($sort)->values();
             }
             $perPage = (int) $request->input('per_page', 10);
-            if ($perPage <= 0 || $perPage > 100) $perPage = 10;
+            if ($perPage <= 0 || $perPage > 100)
+                $perPage = 10;
             $page = (int) ($request->input('page', 1));
             $items = $collection->forPage($page, $perPage)->values();
             $houses = new LengthAwarePaginator($items, $collection->count(), $perPage, $page, [
@@ -61,10 +153,13 @@ class HouseController extends BaseController
                 $jumlahAnggota = $h->jumlahPenghuni;
                 $statusEkonomi = $h->residents()->where('status_ekonomi', 'miskin')->count() > 0 ? 'Miskin' : 'Tidak Miskin';
                 $bantuan = [];
-                if ($h->residents()->where('penerima_pkh', true)->count() > 0) $bantuan[] = 'PKH';
-                if ($h->residents()->where('penerima_bpnt', true)->count() > 0) $bantuan[] = 'BPNT';
-                if ($h->residents()->where('penerima_blt', true)->count() > 0) $bantuan[] = 'BLT';
-                
+                if ($h->residents()->where('penerima_pkh', true)->count() > 0)
+                    $bantuan[] = 'PKH';
+                if ($h->residents()->where('penerima_bpnt', true)->count() > 0)
+                    $bantuan[] = 'BPNT';
+                if ($h->residents()->where('penerima_blt', true)->count() > 0)
+                    $bantuan[] = 'BLT';
+
                 return [
                     'id' => $h->id,
                     'alamat' => $h->alamat,
@@ -80,12 +175,12 @@ class HouseController extends BaseController
         } else {
             $houses = collect([]);
         }
-        
+
         // Get UMKM data for map
         if (Schema::hasTable('umkms')) {
             $umkmQuery = Umkm::query()->where('status', 'aktif')->latest();
             $umkmCollection = $umkmQuery->get();
-            
+
             if ($request->filled('center_lat') && $request->filled('center_lng') && $request->filled('radius_km')) {
                 $centerLat = (float) $request->input('center_lat');
                 $centerLng = (float) $request->input('center_lng');
@@ -99,7 +194,7 @@ class HouseController extends BaseController
                     return $distanceKm <= $radiusKm;
                 });
             }
-            
+
             $umkmPoints = $umkmCollection->map(function ($u) {
                 return [
                     'id' => $u->id,
@@ -116,7 +211,7 @@ class HouseController extends BaseController
                 ];
             });
         }
-        
+
         return view('houses.index', ['houses' => $houses, 'points' => $points, 'umkmPoints' => $umkmPoints]);
     }
 
@@ -127,6 +222,12 @@ class HouseController extends BaseController
 
     public function store(Request $request)
     {
+        $canManageKk = auth()->user()->hasAnyRole(['super_admin', 'admin_desa']);
+
+        if (($request->filled('no_kk') || $request->hasFile('foto_kk')) && !$canManageKk) {
+            abort(403, 'Anda tidak punya izin mengelola data KK.');
+        }
+
         $data = $request->validate([
             'alamat' => 'required|string|max:255',
             'no_kk' => 'nullable|string|max:16',
@@ -148,7 +249,7 @@ class HouseController extends BaseController
             if (!in_array($file->getMimeType(), $allowedMimes)) {
                 return redirect()->back()->with('error', 'File harus berupa gambar JPEG atau PNG!');
             }
-            $data['foto_kk'] = $file->store('kk', 'public');
+            $data['foto_kk'] = $this->storeKkImageSecure($request->file('foto_kk'));
         }
 
         House::create([
@@ -193,7 +294,7 @@ class HouseController extends BaseController
                 return redirect()->back()->with('error', 'File harus berupa gambar JPEG atau PNG!');
             }
             if ($house->foto_kk && Storage::disk('public')->exists($house->foto_kk)) {
-                Storage::disk('public')->delete($house->foto_kk);
+                Storage::disk('secure')->delete($house->foto_kk);
             }
             $data['foto_kk'] = $file->store('kk', 'public');
         }

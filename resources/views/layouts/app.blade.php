@@ -49,6 +49,14 @@
                         UMKM
                     </a>
                     @auth
+                        @if(auth()->user()->hasAnyRole(['super_admin','admin_desa']))
+                            <a href="{{ route('users.index') }}" class="px-4 py-2 rounded-md text-sm font-medium {{ request()->routeIs('users.*') ? 'bg-green-900 text-white' : 'text-green-100 hover:bg-green-700' }}">
+                                <svg class="w-4 h-4 inline-block mr-1" fill="currentColor" viewBox="0 0 20 20"><path d="M8 9a3 3 0 100-6 3 3 0 000 6zM2 18a6 6 0 0112 0H2zM14 7a2 2 0 11-4 0 2 2 0 014 0zM16 18v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2h12z"/></svg>
+                                Manajemen User
+                            </a>
+                        @endif
+                    @endauth
+                    @auth
                         <a href="{{ route('dashboard') }}" class="px-4 py-2 rounded-md text-sm font-medium {{ request()->routeIs('dashboard') ? 'bg-green-900 text-white' : 'text-green-100 hover:bg-green-700' }}">
                             <svg class="w-4 h-4 inline-block mr-1" fill="currentColor" viewBox="0 0 20 20"><path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zM3 10a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-6zM14 9a1 1 0 00-1 1v6a1 1 0 001 1h2a1 1 0 001-1v-6a1 1 0 00-1-1h-2z"/></svg>
                             Dashboard
@@ -98,6 +106,11 @@
             <div class="px-2 pt-2 pb-3 space-y-1">
                 <a href="{{ route('houses.index') }}" class="block px-3 py-2 rounded-md text-base font-medium text-white hover:bg-green-800">Data Rumah</a>
                 <a href="{{ route('umkms.index') }}" class="block px-3 py-2 rounded-md text-base font-medium text-white hover:bg-green-800">Data UMKM</a>
+                        @auth
+                            @if(auth()->user()->hasAnyRole(['super_admin','admin_desa']))
+                                <a href="{{ route('users.index') }}" class="block px-3 py-2 rounded-md text-base font-medium text-white hover:bg-green-800">Manajemen User</a>
+                            @endif
+                        @endauth
                 @auth
                     <a href="{{ route('dashboard') }}" class="block px-3 py-2 rounded-md text-base font-medium text-white hover:bg-green-800">Dashboard</a>
                     <a href="{{ route('residents.index') }}" class="block px-3 py-2 rounded-md text-base font-medium text-white hover:bg-green-800">Data Warga</a>
