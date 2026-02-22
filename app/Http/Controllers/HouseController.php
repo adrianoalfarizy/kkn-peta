@@ -293,10 +293,10 @@ class HouseController extends BaseController
             if (!in_array($file->getMimeType(), $allowedMimes)) {
                 return redirect()->back()->with('error', 'File harus berupa gambar JPEG atau PNG!');
             }
-            if ($house->foto_kk && Storage::disk('public')->exists($house->foto_kk)) {
+            if ($house->foto_kk && Storage::disk('secure')->exists($house->foto_kk)) {
                 Storage::disk('secure')->delete($house->foto_kk);
             }
-            $data['foto_kk'] = $file->store('kk', 'public');
+            $data['foto_kk'] = $this->storeKkImageSecure($file);
         }
 
         $house->update([
@@ -314,8 +314,8 @@ class HouseController extends BaseController
 
     public function destroy(House $house)
     {
-        if ($house->foto_kk && Storage::disk('public')->exists($house->foto_kk)) {
-            Storage::disk('public')->delete($house->foto_kk);
+        if ($house->foto_kk && Storage::disk('secure')->exists($house->foto_kk)) {
+            Storage::disk('secure')->delete($house->foto_kk);
         }
         $house->delete();
 
