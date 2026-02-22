@@ -1,4 +1,5 @@
 @php($title = 'Detail Rumah')
+
 @extends('layouts.app')
 
 @section('content')
@@ -22,25 +23,15 @@
                     <div class="text-sm">{{ $house->alamat }}</div>
                 </div>
                 @auth
-                    <div>
-                        <div class="text-xs text-neutral-600">Nomor KK</div>
-                        <div class="text-sm">{{ $house->no_kk ?: '-' }}</div>
-                    </div>
-                @endauth
-                @auth
-                    @php
-                        $canSeeKk = auth()->check() && auth()->user()->hasAnyRole(['super_admin', 'admin_desa']);
-                    @endphp
-
-                    @if($canSeeKk)
+                    @if(auth()->user()->hasAnyRole(['super_admin', 'admin_desa']))
                         <div>
-                            <h3>Nomor KK</h3>
-                            <div>{{ $house->no_kk ?: '-' }}</div>
+                            <div class="text-xs text-neutral-600">Nomor KK</div>
+                            <div class="text-sm">{{ $house->no_kk ?: '-' }}</div>
                         </div>
 
                         @if($house->foto_kk)
                             <div>
-                                <h3>Foto KK</h3>
+                                <div class="text-xs text-neutral-600">Foto KK</div>
                                 <a href="{{ route('houses.kk', $house) }}" target="_blank" rel="noopener">
                                     Lihat Foto KK (private)
                                 </a>
